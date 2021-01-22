@@ -1,19 +1,29 @@
-#include <iostream>
 #include <cstdint>
 #include <random>
-#include <chrono>
-#include <ctime>
 #include <stdlib.h>
 #include <time.h>
 
 #define _POSIX_C_SOURCE 199309L
-#define COUNT 10000
-#define checkCuda(ans) { checkCudaError((ans), __LINE__); }
+#define COUNT 5000
 
-void checkCudaError(cudaError_t cudaStatus, int line) 
+#ifdef __DRIVER_TYPES_H__
+    #ifndef DEVICE_RESET
+        #define DEVICE_RESET cudaDeviceReset();
+    #endif
+#else
+    #ifndef DEVICE_RESET
+        #define DEVICE_RESET 
+    #endif
+#endif
+
+#define checkCudaErrors(val) { check((val), __LINE__); }
+
+void check(cudaError_t cudaStatus, int line)
 {
     if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "Line %d, CUDA Error %d: %s\n", line, cudaStatus, cudaGetErrorString(cudaStatus));
+        fprintf(stderr, "CUDA Error %d at line %d: %s\n", line, cudaStatus, cudaGetErrorString(cudaStatus));
+        DEVICE_RESET
+            exit(EXIT_FAILURE);
     }
 }
 
@@ -27,7 +37,7 @@ std::uniform_int_distribution<unsigned long long> dis(
 void generateSeqs(uint64_t* seqs) 
 {
     for (uint64_t i = 0; i < COUNT * 8; i++) {
-        seqs[i] = (dis(gen) >> 62) & UINT64_MAX;
+        seqs[i] = (dis(gen) >> 63) & UINT64_MAX;
     }
 }
 
@@ -122,9 +132,12 @@ cudaError_t hammingCuda(const uint64_t* seqs, bool* pairs)
 {
     dim3 block(32, 4);
     dim3 grid(block.x * block.y, ceil((double)COUNT / (block.x * block.y)));
+
     isHammingOneCuda <<<grid, block>>> (seqs, pairs);
-    checkCuda(cudaGetLastError());
-    checkCuda(cudaDeviceSynchronize());
+
+    checkCudaErrors(cudaGetLastError());
+    checkCudaErrors(cudaDeviceSynchronize());
+
     return cudaSuccess;
 }
 
@@ -174,8 +187,8 @@ int main()
             counter++;
     printf("Pairs with Hamming distance of 1:  %I64i\n", counter);
 
-    checkCuda(cudaFree(seqs));
-    checkCuda(cudaFree(pairs));
+    checkCudaErrors(cudaFree(seqs));
+    checkCudaErrors(cudaFree(pairs));
 	getchar();
     return 0;
 }
