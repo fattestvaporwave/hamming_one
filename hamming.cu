@@ -4,7 +4,7 @@
 #include <time.h>
 
 #define _POSIX_C_SOURCE 199309L
-#define COUNT 5000
+#define COUNT 10000
 
 #ifdef __DRIVER_TYPES_H__
     #ifndef DEVICE_RESET
@@ -36,17 +36,17 @@ std::uniform_int_distribution<unsigned long long> dis(
 
 void generateSeqs(uint64_t* seqs) 
 {
-    for (uint64_t i = 0; i < COUNT * 8; i++) {
+    for (unsigned long long i = 0; i < COUNT * 25; i++) {
         seqs[i] = (dis(gen) >> 63) & UINT64_MAX;
     }
 }
 
 void printSeqs(uint64_t* seqs) 
 {
-    for (long i = 0; i < COUNT * 8; i += 8)
+    for (unsigned long long i = 0; i < COUNT * 25; i += 25)
     {
-        printf("Sequence %li:  ", i / 8 + 1);
-        for (long j = 0; j < 8; j++)
+        printf("Sequence %lli:  ", i / 25 + 1);
+        for (unsigned long long j = 0; j < 25; j++)
         {
             printf("%I64i ", seqs[i + j]);
         }
@@ -54,7 +54,7 @@ void printSeqs(uint64_t* seqs)
     }
 }
 
-//-------------------CPU SOLUTION------------------------
+//CPU SOLUTION
 
 int hammingDistance(uint64_t n1, uint64_t n2)
 {
@@ -69,18 +69,18 @@ int hammingDistance(uint64_t n1, uint64_t n2)
     return setBits;
 }
 
-void hamming(const uint64_t* seqs, bool* pairs) 
+void isHammingOne(const uint64_t* seqs, bool* pairs) 
 {
     long distance;
 
-    for (long i = 0; i < COUNT; i++) 
+    for (unsigned long long i = 0; i < COUNT; i++)
     {
-        for (long j = i + 1; j < COUNT; j++) 
+        for (unsigned long long j = i + 1; j < COUNT; j++)
         {
             distance = 0;
 
-            for (long k = 0; k < 8; k++)
-                distance += hammingDistance(seqs[i * 8 + k], seqs[j * 8 + k]);
+            for (long k = 0; k < 25; k++)
+                distance += hammingDistance(seqs[i * 25 + k], seqs[j * 25 + k]);
 
             if (distance == 1)
                 pairs[i * COUNT + j] = true;
@@ -88,7 +88,7 @@ void hamming(const uint64_t* seqs, bool* pairs)
     }
 }
 
-//-------------------GPU SOLUTION------------------------
+//GPU SOLUTION
 
 __device__ int hammingDistanceCuda(uint64_t n1, uint64_t n2)
 {
@@ -112,16 +112,16 @@ __global__ void isHammingOneCuda(const uint64_t* seqs, bool* pairs)
 
     unsigned int globalThreadNum = blockNumInGrid * threadsPerBlock + threadNumInBlock;
 
-    uint64_t comparedSeq[8];
-    for (unsigned int i = 0; i < 8; i++) 
-        comparedSeq[i] = seqs[globalThreadNum * 8 + i];
+    uint64_t comparedSeq[25];
+    for (unsigned long long i = 0; i < 25; i++)
+        comparedSeq[i] = seqs[globalThreadNum * 25 + i];
 
-    for (unsigned int i = globalThreadNum + 1; i < COUNT; i++)
+    for (unsigned long long i = globalThreadNum + 1; i < COUNT; i++)
     {
         long distance = 0;
 
-        for (unsigned int j = 0; j < 8; j++) 
-            distance += hammingDistanceCuda(comparedSeq[j], seqs[i * 8 + j]);
+        for (unsigned long long j = 0; j < 25; j++)
+            distance += hammingDistanceCuda(comparedSeq[j], seqs[i * 25 + j]);
 
         if (distance == 1) 
             pairs[globalThreadNum * COUNT + i] = true;
@@ -141,7 +141,7 @@ cudaError_t hammingCuda(const uint64_t* seqs, bool* pairs)
     return cudaSuccess;
 }
 
-//-------------------MAIN------------------------
+//MAIN
 
 int main() 
 {
@@ -151,17 +151,17 @@ int main()
     double duration;
     uint64_t counter = 0;
 
-    cudaMallocManaged(&seqs, COUNT * 8 * sizeof(uint64_t));
+    cudaMallocManaged(&seqs, COUNT * 25 * sizeof(uint64_t));
     cudaMallocManaged(&pairs, COUNT * COUNT * sizeof(bool));
     generateSeqs(seqs);
     printSeqs(seqs);
 
-    for (long i = 0; i < COUNT * COUNT; i++)
+    for (unsigned long long i = 0; i < COUNT * COUNT; i++)
         pairs[i] = false;
 
     printf("-------------CPU SOLUTION------------\n");
     start = clock();
-    hamming(seqs, pairs);
+    isHammingOne(seqs, pairs);
     finish = clock();
     duration = (double)(finish - start) / CLOCKS_PER_SEC;
     printf("Time:  %2.3f seconds\n", duration);
@@ -172,7 +172,7 @@ int main()
     printf("Pairs with Hamming distance of 1:  %I64i\n", counter);
     
     counter = 0;
-    for (long i = 0; i < COUNT * COUNT; i++)
+    for (unsigned long long i = 0; i < COUNT * COUNT; i++)
         pairs[i] = false;
 
     printf("\n-------------GPU SOLUTION------------\n");
